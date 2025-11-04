@@ -55,22 +55,31 @@ class ConvertibleBond:
 	def bond_floor(self):
 		total_rate = self.risk_free_rate + self.credit_spread
 		freq = 2 #Semiannual coupon payments
-		dt = 1 / freq
-		periods = int(self.time_to_maturity * freq)
+		full_periods = int(self.time_to_maturity * freq)
+		partial = (self.time_to_maturity * freq) - full_periods
 		pv_coupons = 0
+		coupon_payment = self.par * self.coupon / freq
 
-		for t in range(1, periods + 1):
-			time = t * dt
-			coupon_payment = self.par * self.coupon / freq
+		#full coupons
+		for t in range(1, full_periods + 1):
 			discount_factor = 1 / ((1 + total_rate / freq) ** t)
-			pv_coupon = coupon_payment * discount_factor
-			pv_coupons += pv_coupon
+			pv_coupons += coupon_payment * discount_factor
 
-		par_discount_factor = 1 / ((1 + total_rate  / freq) ** periods)
-		pv_par = self.par * par_discount_factor
-
+		#Frational coupons. Assume accruing coupon payments. Remove for textbook staggered coupon payments.
+		#''''
+		if partial > 0:
+			t = full_periods + partial
+			discount_factor = 1 / ((1 + total_rate / freq) ** t)
+			pv_coupons += coupon_payment * partial * discount_factor
+		
+		pv_par = self.par / ((1 + total_rate / freq) ** (self.time_to_maturity * freq))
+		#'''
+		
+		#pv_par = self.par / ((1 + total_rate / freq) ** full_periods)
+	
 		total_value = pv_coupons + pv_par
 
+		return total_value
 		return total_value
 
 	def BS_option_value(self): 
@@ -197,4 +206,5 @@ class ConvertibleBond:
 		return round(convert_tree[0][0] / 10, 2)
 
 cb = ConvertibleBond(initial_stock_price = 100, current_stock_price = 100, conversion_premium = 35, coupon = 3.5, maturity = 5, time_to_maturity = 5, risk_free_rate = 4.0, credit_spread = 200, costofborrow = 50, equity_vol = 30, div_yield = 2.0)
+
 print(cb.BS_total_value())
