@@ -80,7 +80,6 @@ class ConvertibleBond:
 		total_value = pv_coupons + pv_par
 
 		return total_value
-		return total_value
 
 	def BS_option_value(self): 
 		current_stock_price = self.current_stock_price
@@ -208,3 +207,4 @@ class ConvertibleBond:
 cb = ConvertibleBond(initial_stock_price = 100, current_stock_price = 100, conversion_premium = 35, coupon = 3.5, maturity = 5, time_to_maturity = 5, risk_free_rate = 4.0, credit_spread = 200, costofborrow = 50, equity_vol = 30, div_yield = 2.0)
 
 print(cb.BS_total_value())
+
