@@ -11,10 +11,10 @@ Inputs:
 	conversion_premium - conversion premium % (e.g. 40)
 	coupon - annual coupon % (e.g. 3.5)
 	maturity - maturity of the bond
-	time_to_maturity - time in year / decimal format to maturity (2 years 3 months - 2.25)
+	time_to_maturity - time in year / decimal format to maturity (e.g. 2 years 3 months = 2.25)
 	risk_free_rate - risk free rate, quoted as a percent
 	credit_spread - credit spread, in bps
-	equity_vol - underlying equity volatility, as a %
+	equity_vol - underlying equity annualized volatility, as a %
 	div_yield - underlying equity dividend yield, as a %
 	costofborrow - borrow cost, in bps
 
@@ -100,7 +100,7 @@ class ConvertibleBond:
 		#BS model adjusted for effective div yield
 		calloption_value = current_stock_price * exp(effective_div_yield * time_to_maturity * -1) * N_d1 - strike * exp(risk_free_rate * time_to_maturity * -1) * N_d2
 
-		#option gives 1 share for each bond, so need to scale to bond par / conv ratio
+		#option gives 1 share for each bond, so we need to scale to bond par / conv ratio
 		adj_calloption_value = calloption_value * self.conversion_ratio 
 		return adj_calloption_value
 
@@ -155,7 +155,7 @@ class ConvertibleBond:
 			steps = int(time_to_maturity * 12)
 
 		dt = time_to_maturity / steps
-		up = exp(equity_vol * sqrt(dt))
+		up = exp(equity_vol * sqrt(dt)) #scales annualized vol
 		down = 1 / up
 
 		#Risk neutral probability under effective div yield
@@ -204,7 +204,18 @@ class ConvertibleBond:
 
 		return round(convert_tree[0][0] / 10, 2)
 
-cb = ConvertibleBond(initial_stock_price = 100, current_stock_price = 100, conversion_premium = 35, coupon = 3.5, maturity = 5, time_to_maturity = 5, risk_free_rate = 4.0, credit_spread = 200, costofborrow = 50, equity_vol = 30, div_yield = 2.0)
+#cb = ConvertibleBond(initial_stock_price = 100, current_stock_price = 100, conversion_premium = 35, coupon = 3.5, maturity = 5, time_to_maturity = 5, risk_free_rate = 4.0, credit_spread = 200, costofborrow = 50, equity_vol = 30, div_yield = 2.0)
+#print(cb.BS_total_value())
 
-print(cb.BS_total_value())
+#Pricing Core Scientific 0s up 42.5 2031 notes
+CORZ_issue = ConvertibleBond(initial_stock_price = 15.78, current_stock_price = 15.78, conversion_premium = 42.5, coupon = 0, maturity = 7, time_to_maturity = 7, risk_free_rate = 4.5, credit_spread = 200, costofborrow = 50, equity_vol = 55, div_yield = 0)
+CORZ_now = ConvertibleBond(initial_stock_price = 15.78, current_stock_price = 18.82, conversion_premium = 42.5, coupon = 0, maturity = 7, time_to_maturity = 6.2, risk_free_rate = 4.5, credit_spread = 200, costofborrow = 50, equity_vol = 55, div_yield = 0)
+x_bs = CORZ_issue.BS_total_value()
+x_b = CORZ_issue.binomial_convert_value()
+y_bs = CORZ_now.BS_total_value()
+y_b = CORZ_now.binomial_convert_value()
+
+print(f"CORZ 2031 0s up 42.5: At issue, BS: {x_bs}, binom: {x_b}")
+print(f"CORZ 2031 0s up 42.5: Current, BS: {y_bs}, binom: {y_b}")
+
 
