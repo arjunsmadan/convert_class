@@ -21,6 +21,7 @@ Inputs:
 Assumptions in the class: 
 	Semiannual coupon payments
 	Non-call life
+	No bankrupcy risk
 
 	Bond + Option Black Scholes pricing model
 		Bond pricing - PV of cashflows from the debt
@@ -31,7 +32,6 @@ Assumptions in the class:
 		Steps calculated for once a month unless specicied as input
 
 '''
-
 
 class ConvertibleBond:
 	def __init__(self, initial_stock_price, current_stock_price, conversion_premium, coupon, maturity, time_to_maturity, risk_free_rate, credit_spread, equity_vol, div_yield, costofborrow):
@@ -88,6 +88,7 @@ class ConvertibleBond:
 		risk_free_rate = self.risk_free_rate
 		equity_vol = self.equity_vol
 		effective_div_yield = self.div_yield + self.costofborrow
+		conversion_ratio = self.conversion_ratio
 
 		#Black-Scholes d1 and d2
 		d1 = (log(current_stock_price / strike) + (risk_free_rate - effective_div_yield + 0.5*equity_vol ** 2) * time_to_maturity) / (equity_vol * sqrt(time_to_maturity))
@@ -100,7 +101,7 @@ class ConvertibleBond:
 		#BS model adjusted for effective div yield
 		calloption_value = current_stock_price * exp(effective_div_yield * time_to_maturity * -1) * N_d1 - strike * exp(risk_free_rate * time_to_maturity * -1) * N_d2
 
-		#option gives 1 share for each bond, so we need to scale to bond par / conv ratio
+		#Scale value for 1 share by conversion ratio for 1 bond
 		adj_calloption_value = calloption_value * self.conversion_ratio 
 		return adj_calloption_value
 
@@ -111,33 +112,29 @@ class ConvertibleBond:
 		risk_free_rate = self.risk_free_rate
 		equity_vol = self.equity_vol
 		effective_div_yield = self.div_yield + self.costofborrow
-		
-		conversion_ratio = self.conversion_ratio #need for scaling greeks to express per bond
+		conversion_ratio = self.conversion_ratio
 
+		#Black-Scholes d1 and d2
 		d1 = (log(current_stock_price / strike) + (risk_free_rate - effective_div_yield + 0.5*equity_vol ** 2) * time_to_maturity) / (equity_vol * sqrt(time_to_maturity))
 		d2 = d1 - equity_vol * sqrt(time_to_maturity)
 
-		# Option Greeks (for 1 share)
-		delta = exp(effective_div_yield * time_to_maturity * -1) * norm.cdf(d1)
-		gamma = exp(effective_div_yield * time_to_maturity * -1) * norm.pdf(d1) / (current_stock_price * equity_vol * sqrt(time_to_maturity))
-		vega = current_stock_price * exp(effective_div_yield * time_to_maturity * -1) * norm.pdf(d1) * sqrt(time_to_maturity) / 100 #scaled for 1% change in vol
-		theta = (current_stock_price * -1 * equity_vol * exp(effective_div_yield * time_to_maturity * -1) * norm.pdf(d1) / (2 * sqrt(time_to_maturity)) - risk_free_rate * strike * exp(risk_free_rate * time_to_maturity * -1) * norm.cdf(d2) + effective_div_yield * current_stock_price * exp(effective_div_yield * time_to_maturity * -1) * norm.cdf(d1)) / 365 # per day
+		 #Option Greeks for 1 share
+        delta = exp(effective_div_yield * time_to_maturity * -1) * norm.cdf(d1)
+        gamma = exp(effective_div_yield * time_to_maturity * -1) / (current_stock_price * equity_vol * sqrt(time_to_maturity))* norm.pdf(d1)
+        theta = (1 / 252) * (-(current_stock_price * equity_vol * exp(effective_div_yield * time_to_maturity * -1) / (2 * sqrt(time_to_maturity)) * norm.pdf(d1)) - risk_free_rate * strike * exp(risk_free_rate * time_to_maturity * -1) * norm.cdf(d2) + effective_div_yield * current_stock_price * exp(effective_div_yield * time_to_maturity * -1) * norm.cdf(d1) )
+        vega = (1/100) * current_stock_price * exp(effective_div_yield * time_to_maturity * -1) * sqrt(time_to_maturity) * norm.pdf(d1)
 
 		return { 
-			"delta": delta * conversion_ratio,
-			"gamma": gamma * conversion_ratio,
-			"vega": vega * conversion_ratio,
-			"theta": theta * conversion_ratio
+			 "delta": round(delta * conversion_ratio / 10 / current_stock_price, 4),
+            "gamma": round(gamma * conversion_ratio / 10 / (current_stock_price ** 2), 4), 
+            "theta": round(theta * conversion_ratio / 10, 4),
+            "vega": round(vega * conversion_ratio / 10, 4)
 		}
 
-
 	def BS_total_value(self):
-		BS_total_value = self.bond_floor() + self.BS_option_value()
-
-		return round(BS_total_value / 10, 2)
+		return round((self.bond_floor() + self.BS_option_value()) / 10, 2)
 
 	def binomial_convert_value(self, steps = None):
-
 		current_stock_price = self.current_stock_price
 		conversion_price = self.conversion_price
 		conversion_ratio = self.conversion_ratio
@@ -155,12 +152,14 @@ class ConvertibleBond:
 			steps = int(time_to_maturity * 12)
 
 		dt = time_to_maturity / steps
+		
 		up = exp(equity_vol * sqrt(dt)) #scales annualized vol
 		down = 1 / up
 
 		#Risk neutral probability under effective div yield
 		effective_div_yield = div_yield + costofborrow
 		r = risk_free_rate + credit_spread
+		
 		p = (exp((r - effective_div_yield) * dt) - down) / (up - down)
 
 		#Precompute underlying equity price tree
@@ -174,42 +173,33 @@ class ConvertibleBond:
 		for j in range(steps + 1):
 			stock = equity_tree[steps][j]
 			converted_value = stock * conversion_ratio
-			hold_value = par #Assuming par repayment at maturity / no default risk
+			hold_value = par #Assumes no bankrupcy risk
 			convert_tree[steps][j] = max(converted_value, hold_value)
 
-		#Coupon amount per step (assuming semiannual payments)
-		coupon_freq = 2
-		coupon_interval = 1 / coupon_freq
-		if dt == coupon_interval:
-			coupon_payment = par * coupon / coupon_freq
-		else:
-			coupon_payment = 0
+		#Continuous coupon amount per step
+        coupon_carry = par * coupon * dt
 
 		#Backward induction to complete the binomial tree
 		for i in range(steps - 1, -1, -1):
 			for j in range(i + 1):
-				EV = (p * convert_tree[i+1][j+1] + (1-p) * convert_tree[i+1][j]) * exp(-r * dt)
+				EV = p * convert_tree[i+1][j+1] + (1-p) * convert_tree[i+1][j]
+				EV = (EV + coupon_carry) * exp(-r * dt) #add coupon and discount
 				stock = equity_tree[i][j]
 				converted_value = stock * conversion_ratio
 
-				time = (steps - i) * dt
-				if time % coupon_interval < 1e-6:
-					v = EV + coupon_payment
-				else:
-					v = EV
-
-				value = max(v, converted_value)
-
+				value = max(EV, converted_value)
 				convert_tree[i][j] = value
 
 		return round(convert_tree[0][0] / 10, 2)
 
 #cb = ConvertibleBond(initial_stock_price = 100, current_stock_price = 100, conversion_premium = 35, coupon = 3.5, maturity = 5, time_to_maturity = 5, risk_free_rate = 4.0, credit_spread = 200, costofborrow = 50, equity_vol = 30, div_yield = 2.0)
 #print(cb.BS_total_value())
+#print(cb.binomial_convert_value())
+#print(cb.BS_greeks())
 
 #Pricing Core Scientific 0s up 42.5 2031 notes
 CORZ_issue = ConvertibleBond(initial_stock_price = 15.78, current_stock_price = 15.78, conversion_premium = 42.5, coupon = 0, maturity = 7, time_to_maturity = 7, risk_free_rate = 4.5, credit_spread = 200, costofborrow = 50, equity_vol = 55, div_yield = 0)
-CORZ_now = ConvertibleBond(initial_stock_price = 15.78, current_stock_price = 18.82, conversion_premium = 42.5, coupon = 0, maturity = 7, time_to_maturity = 6.2, risk_free_rate = 4.5, credit_spread = 200, costofborrow = 50, equity_vol = 55, div_yield = 0)
+CORZ_now = ConvertibleBond(initial_stock_price = 15.78, current_stock_price = 18.89, conversion_premium = 42.5, coupon = 0, maturity = 7, time_to_maturity = 5.4, risk_free_rate = 4.5, credit_spread = 200, costofborrow = 50, equity_vol = 55, div_yield = 0)
 x_bs = CORZ_issue.BS_total_value()
 x_b = CORZ_issue.binomial_convert_value()
 y_bs = CORZ_now.BS_total_value()
