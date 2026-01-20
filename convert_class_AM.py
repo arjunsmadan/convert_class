@@ -52,6 +52,7 @@ class ConvertibleBond:
         self.conversion_price = self.initial_stock_price * (1 + self.conversion_premium)
         self.conversion_ratio = self.par / self.conversion_price
 
+	#Calculates bond floor by simple PV of the coupons and principal
     def bond_floor(self):
         total_rate = self.risk_free_rate + self.credit_spread
         freq = 2 #Semiannual coupon payments
@@ -81,6 +82,7 @@ class ConvertibleBond:
 
         return total_value
     
+    #Calculates Black-Scholes derived option value, returns scaled value for the bond based on conversion ratio
     def BS_option_value(self):
         current_stock_price = self.current_stock_price
         strike = self.conversion_price
@@ -105,6 +107,7 @@ class ConvertibleBond:
         adj_calloption_value = calloption_value * conversion_ratio
         return adj_calloption_value
 
+	#Calculates bond greeks by scaling Black-Scholes derived option greeks
     def BS_greeks(self):
         current_stock_price = self.current_stock_price
         strike = self.conversion_price
@@ -130,10 +133,12 @@ class ConvertibleBond:
             "theta": float(round(theta * conversion_ratio / 10, 4)),
             "vega": float(round(vega * conversion_ratio / 10, 4))
         }
-
+	
+	#Calculates bond value by adding the bond floor to the Black-Scholes derived option price (scaled by conversion ratio)
     def BS_total_value(self):
         return round((self.bond_floor() + self.BS_option_value()) / 10, 2)
     
+	#Calculates bond value based on binomial pricing model
     def binomial_convert_value(self, steps = None):
         current_stock_price = self.current_stock_price
         conversion_price = self.conversion_price
@@ -193,6 +198,7 @@ class ConvertibleBond:
         
         return round(convert_tree[0][0] / 10, 2)
     
+	#Resets current stock price for existing bond object
     def set_stock_price(self, new_price):
         self.current_stock_price = new_price
 
@@ -200,7 +206,7 @@ class ConvertibleBond:
 cb = ConvertibleBond(initial_stock_price = 100, current_stock_price = 100, conversion_premium = 35, coupon = 3.5, maturity = 5, time_to_maturity = 5, risk_free_rate = 4.0, credit_spread = 200, costofborrow = 50, equity_vol = 30, div_yield = 2.0)
 print(cb.BS_total_value())
 print(cb.binomial_convert_value(steps=500))
-print(cb.BS_greeks())
+#print(cb.BS_greeks())
 
 #Pricing Core Scientific 0s up 42.5 2031 notes
 CORZ_issue = ConvertibleBond(initial_stock_price = 15.78, current_stock_price = 15.78, conversion_premium = 42.5, coupon = 0, maturity = 7, time_to_maturity = 7, risk_free_rate = 4.5, credit_spread = 200, costofborrow = 50, equity_vol = 55, div_yield = 0)
