@@ -210,11 +210,11 @@ class ConvertibleBond:
 cb = ConvertibleBond(initial_stock_price = 100, current_stock_price = 140, conversion_premium = 35, coupon = 3.5, maturity = 5, time_to_maturity = 5, risk_free_rate = 4.0, credit_spread = 200, costofborrow = 50, equity_vol = 30, div_yield = 2.0)
 print(cb.BS_total_value())
 print(cb.binomial_convert_value(steps=500))
-print(cb.BS_greeks())
+#print(cb.BS_greeks())
 
 #Pricing Core Scientific 0s up 42.5 2031 notes
-CORZ_issue = ConvertibleBond(initial_stock_price = 15.78, current_stock_price = 15.78, conversion_premium = 42.5, coupon = 0, maturity = 7, time_to_maturity = 7, risk_free_rate = 4.5, credit_spread = 200, costofborrow = 50, equity_vol = 55, div_yield = 0)
-CORZ_now = ConvertibleBond(initial_stock_price = 15.78, current_stock_price = 18.89, conversion_premium = 42.5, coupon = 0, maturity = 7, time_to_maturity = 5.4, risk_free_rate = 3.6, credit_spread = 200, costofborrow = 50, equity_vol = 55, div_yield = 0)
+CORZ_issue = ConvertibleBond(initial_stock_price = 15.78, current_stock_price = 15.78, conversion_premium = 42.5, coupon = 0, maturity = 7, time_to_maturity = 7, risk_free_rate = 4.5, credit_spread = 350, costofborrow = 50, equity_vol = 70, div_yield = 0)
+CORZ_now = ConvertibleBond(initial_stock_price = 15.78, current_stock_price = 18.77, conversion_premium = 42.5, coupon = 0, maturity = 7, time_to_maturity = 5.4, risk_free_rate = 3.6, credit_spread = 350, costofborrow = 50, equity_vol = 70, div_yield = 0)
 x_bs = CORZ_issue.BS_total_value()
 x_b = CORZ_issue.binomial_convert_value()
 y_bs = CORZ_now.BS_total_value()
@@ -222,3 +222,5 @@ y_b = CORZ_now.binomial_convert_value()
 
 print(f"CORZ 2031 0s up 42.5: At issue, BS: {x_bs}, binom: {x_b}")
 print(f"CORZ 2031 0s up 42.5: Current, BS: {y_bs}, binom: {y_b}")
+
+print(CORZ_now.BS_greeks())
