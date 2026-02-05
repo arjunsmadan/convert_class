@@ -21,6 +21,7 @@ Inputs:
 Assumptions in the class:
     Semiannual coupon payments
     Non-call life
+    No investor put options
     No bankrupcy risk
 
     Bond + Option Black Scholes pricing model
@@ -214,7 +215,7 @@ print(f'Test bond binomial model value: {cb.binomial_convert_value(steps=500)}')
 
 #Pricing Core Scientific 0s up 42.5 2031 notes
 CORZ_issue = ConvertibleBond(initial_stock_price = 15.78, current_stock_price = 15.78, conversion_premium = 42.5, coupon = 0, maturity = 7, time_to_maturity = 7, risk_free_rate = 4.5, credit_spread = 350, costofborrow = 50, equity_vol = 70, div_yield = 0)
-CORZ_now = ConvertibleBond(initial_stock_price = 15.78, current_stock_price = 19.05, conversion_premium = 42.5, coupon = 0, maturity = 7, time_to_maturity = 5.375, risk_free_rate = 3.6, credit_spread = 350, costofborrow = 50, equity_vol = 70, div_yield = 0)
+CORZ_now = ConvertibleBond(initial_stock_price = 15.78, current_stock_price = 14.82, conversion_premium = 42.5, coupon = 0, maturity = 7, time_to_maturity = 5.34, risk_free_rate = 3.75, credit_spread = 350, costofborrow = 50, equity_vol = 70, div_yield = 0)
 x_bs = CORZ_issue.BS_total_value()
 x_b = CORZ_issue.binomial_convert_value()
 y_bs = CORZ_now.BS_total_value()
