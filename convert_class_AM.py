@@ -223,7 +223,7 @@ now = datetime(2026, 2, 20) #Prices as of close on this date
 bond_maturity = datetime(2031, 6, 15)
 nyse = mcal.get_calendar('NYSE')
 remaining_trading_days = nyse.valid_days(start_date = now, end_date = bond_maturity)
-remaining_trading_years = len(remaining_trading_days) / 252
+remaining_trading_years = len(remaining_trading_days) / 252 #divide by 252 trading days in the average year to get trading years remaining (with decimals as needed)
 
 CORZ_now = ConvertibleBond(initial_stock_price = 15.78, current_stock_price = 17.30, conversion_premium = 42.5, coupon = 0, maturity = 7, time_to_maturity = remaining_trading_years, risk_free_rate = 3.75, credit_spread = 325, costofborrow = 50, equity_vol = 70, div_yield = 0)
 x_bs = CORZ_issue.BS_total_value()
