@@ -219,13 +219,13 @@ print(f'Test bond: Binomial model value: {cb.binomial_convert_value(steps=500)}'
 CORZ_issue = ConvertibleBond(initial_stock_price = 15.78, current_stock_price = 15.78, conversion_premium = 42.5, coupon = 0, maturity = 7, time_to_maturity = 7, risk_free_rate = 4.5, credit_spread = 350, costofborrow = 50, equity_vol = 70, div_yield = 0)
 
 #Remaining time to maturity, adjusted for holidays and weekends (real trading days)
-now = datetime(2026, 3, 6) #Prices as of close on this date
-bond_maturity = datetime(2031, 6, 15)
+now = datetime(2026, 3, 13) #Prices as of close on this date
+CORZ_bond_maturity = datetime(2031, 6, 15)
 nyse = mcal.get_calendar('NYSE')
-remaining_trading_days = nyse.valid_days(start_date = now, end_date = bond_maturity)
-remaining_trading_years = len(remaining_trading_days) / 252 #divide by 252 trading days in the average year to get trading years remaining (with decimals as needed)
+CORZ_remaining_trading_days = nyse.valid_days(start_date = now, end_date = CORZ_bond_maturity)
+CORZ_remaining_trading_years = len(CORZ_remaining_trading_days) / 252 #divide by 252 trading days in the average year to get trading years remaining (with decimals as needed)
 
-CORZ_now = ConvertibleBond(initial_stock_price = 15.78, current_stock_price = 14.86, conversion_premium = 42.5, coupon = 0, maturity = 7, time_to_maturity = remaining_trading_years, risk_free_rate = 3.75, credit_spread = 300, costofborrow = 50, equity_vol = 70, div_yield = 0)
+CORZ_now = ConvertibleBond(initial_stock_price = 15.78, current_stock_price = 16.49, conversion_premium = 42.5, coupon = 0, maturity = 7, time_to_maturity = CORZ_remaining_trading_years, risk_free_rate = 3.75, credit_spread = 300, costofborrow = 50, equity_vol = 70, div_yield = 0)
 x_bs = CORZ_issue.BS_total_value()
 x_b = CORZ_issue.binomial_convert_value(steps = 1000)
 y_bs = CORZ_now.BS_total_value()
