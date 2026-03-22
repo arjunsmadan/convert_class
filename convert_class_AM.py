@@ -33,7 +33,8 @@ Assumptions in the class:
 
     Binomial Model Pricing
         Steps calculated for once a month unless specified as input
-    
+        Includes credit decay factor (defaults to 0.5) that scales base credit spread to return an independent adjusted credit spread at each node in the equity price tree
+            Similar to Kynex bankrupcy ON model    
 '''
 
 class ConvertibleBond:
@@ -146,7 +147,12 @@ class ConvertibleBond:
         return round((self.bond_floor() + self.BS_option_value()) / 10, 2)
     
     #Calculates bond value based on binomial pricing model
-    def binomial_convert_value(self, steps = None):
+    #   The variable credit_decay as an input indicates the decay factor at which credit widens in an equity downside case (or tightens in an equity upside case)
+    #   Similar to Kynex decay factor in the bankrupcy ON model
+    #   Computed as adjusted credit = base credit * (current stock price / stock price at a given node in the tree)^credit_decay
+    #   When credit_decay set to 0, effectively becomes bankrupcy OFF model, as adjusted credit will equal base_credit for all stock prices when credit_decay is 0 
+    #   Defaults to 0.5, and formula above for adjusted credit was determined as suggested in a 2003 Kynex published Bulletin: https://www.kynex.com/bulletin/Dec2003/KynexConvertModel.htm
+    def binomial_convert_value(self, steps = None, credit_decay = 0.5):
         current_stock_price = self.current_stock_price
         conversion_price = self.conversion_price
         conversion_ratio = self.conversion_ratio
@@ -168,11 +174,11 @@ class ConvertibleBond:
         up = exp(equity_vol * sqrt(dt)) #scales annualized vol
         down = 1 / up
 
-        #Risk neutral probability under effective div yield
+        #Risk neutral probability under effective div yield. Uses base credit spread (no decay factor) here for risk neutral calculations
         effective_div_yield = div_yield + costofborrow
-        r = risk_free_rate + credit_spread
+        r_base = risk_free_rate + credit_spread
 
-        p = (exp((r - effective_div_yield) * dt) - down) / (up - down)
+        p = (exp((r_base - effective_div_yield) * dt) - down) / (up - down)
 
         #Precompute underlying equity price tree
         equity_tree = [[0 for j in range(i + 1)] for i in range(steps + 1)]
@@ -185,9 +191,8 @@ class ConvertibleBond:
         for j in range(steps + 1):
             stock = equity_tree[steps][j]
             converted_value = stock * conversion_ratio
-            hold_value = par #Assumes no bankrupcy risk
+            hold_value = par #Assumes no complete bankrupcy risk
             convert_tree[steps][j] = max(converted_value, hold_value)
-        
        
         #Continuous coupon amount per step
         coupon_carry = par * coupon * dt
@@ -196,8 +201,10 @@ class ConvertibleBond:
         for i in range(steps - 1, -1, -1):
             for j in range(i + 1):
                 EV = p * convert_tree[i+1][j+1] + (1-p) * convert_tree[i+1][j]
-                EV = (EV + coupon_carry) * exp(-r * dt) #add coupon and discount
                 stock = equity_tree[i][j]
+                adj_credit = credit_spread * (current_stock_price / stock) ** credit_decay #So that credit spread scales appropriately with the credit decay factor based on the indivudal node, relative to current stock price (i.e., the precomputed stock price at each node of the equity tree helps determine the credit decay at that specific node)
+                adj_r = risk_free_rate + adj_credit #R also computed at each indivudal node independently, with the new adjusted credit spread line above
+                EV = (EV + coupon_carry) * exp(-adj_r * dt) #add coupon and discount
                 converted_value = stock * conversion_ratio
 
                 value = max(EV, converted_value)
@@ -209,10 +216,9 @@ class ConvertibleBond:
     def set_stock_price(self, new_price):
         self.current_stock_price = new_price
 
-
 cb = ConvertibleBond(initial_stock_price = 100, current_stock_price = 130, conversion_premium = 35, coupon = 3.5, maturity = 5, time_to_maturity = 5, risk_free_rate = 4.0, credit_spread = 200, costofborrow = 50, equity_vol = 30, div_yield = 2.0)
 print(f'Test bond: Black-scholes derived value: {cb.BS_total_value()}')
-print(f'Test bond: Binomial model value: {cb.binomial_convert_value(steps=500)}')
+print(f'Test bond: Binomial model value: {cb.binomial_convert_value(steps=500, credit_decay = 0)}')
 #print(cb.BS_greeks())
 
 #Pricing Core Scientific 0s up 42.5 2031 notes and 2029 3s up 30 notes
@@ -231,5 +237,5 @@ CORZ_29_remaining_trading_years = len(CORZ_29_remaining_trading_days) / 252 #div
 CORZ_31_now = ConvertibleBond(initial_stock_price = 15.78, current_stock_price = 15.81, conversion_premium = 42.5, coupon = 0.0, maturity = 7, time_to_maturity = CORZ_31_remaining_trading_years, risk_free_rate = 3.87, credit_spread = 320, costofborrow = 50, equity_vol = 70, div_yield = 0)
 CORZ_29_now = ConvertibleBond(initial_stock_price = 8.46, current_stock_price = 15.81, conversion_premium = 30.0, coupon = 3.0, maturity = 5, time_to_maturity = CORZ_29_remaining_trading_years, risk_free_rate = 3.80, credit_spread = 300, costofborrow = 50, equity_vol = 70, div_yield = 0)
 
-print(f"CORZ 2031 0s up 42.5: \n At issue, BS: {CORZ_31_issue.BS_total_value()}, binom: {CORZ_31_issue.binomial_convert_value(steps = 1000)} \n Current - {formatted_now}, BS: {CORZ_31_now.BS_total_value()}, binom: {CORZ_31_now.binomial_convert_value(steps = 1000)} \n Greeks: {CORZ_31_now.BS_greeks()}")
-print(f"CORZ 2029 3s up 30.0: \n Current - {formatted_now}, BS: {CORZ_29_now.BS_total_value()}, binom: {CORZ_29_now.binomial_convert_value(steps = 1000)}")
+print(f"CORZ 2031 0s up 42.5: \n At issue, BS: {CORZ_31_issue.BS_total_value()}, binom: {CORZ_31_issue.binomial_convert_value(steps = 1000, credit_decay = 0.4)} \n Current - {formatted_now}, BS: {CORZ_31_now.BS_total_value()}, binom: {CORZ_31_now.binomial_convert_value(steps = 1000, credit_decay = 0.4)} \n Greeks: {CORZ_31_now.BS_greeks()}")
+print(f"CORZ 2029 3s up 30.0: \n Current - {formatted_now}, BS: {CORZ_29_now.BS_total_value()}, binom: {CORZ_29_now.binomial_convert_value(steps = 1000, credit_decay = 0.4)}")
