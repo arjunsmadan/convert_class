@@ -218,14 +218,14 @@ class ConvertibleBond:
 
 cb = ConvertibleBond(initial_stock_price = 100, current_stock_price = 130, conversion_premium = 35, coupon = 3.5, maturity = 5, time_to_maturity = 5, risk_free_rate = 3.95, credit_spread = 250, costofborrow = 50, equity_vol = 40, div_yield = 2.0)
 print(f'Test bond: Black-scholes derived value: {cb.BS_total_value()}')
-print(f'Test bond: Binomial model value: {cb.binomial_convert_value(steps=500, credit_decay = 0.5)}') #credit decay 0 for bankruptcy off
+print(f'Test bond: Binomial model value: {cb.binomial_convert_value(steps=250, credit_decay = 0)}') #credit decay 0 for bankruptcy off
 #print(cb.BS_greeks())
 
 #Pricing Core Scientific 0s up 42.5 2031 notes and 2029 3s up 30 notes
 CORZ_31_issue = ConvertibleBond(initial_stock_price = 15.78, current_stock_price = 15.78, conversion_premium = 42.5, coupon = 0, maturity = 7, time_to_maturity = 7, risk_free_rate = 4.5, credit_spread = 350, costofborrow = 50, equity_vol = 70, div_yield = 0)
 
 #Remaining time to maturity, adjusted for holidays and weekends (real trading days)
-now = datetime(2026, 3, 23) #Prices as of close on this date
+now = datetime(2026, 4, 1) #Prices as of close on this date
 formatted_now = now.strftime("%B %d, %Y")
 CORZ_31_bond_maturity = datetime(2031, 6, 15)
 CORZ_29_bond_maturity = datetime(2029, 9, 1)
@@ -234,8 +234,8 @@ CORZ_31_remaining_trading_days = nyse.valid_days(start_date = now, end_date = CO
 CORZ_29_remaining_trading_days = nyse.valid_days(start_date = now, end_date = CORZ_29_bond_maturity)
 CORZ_31_remaining_trading_years = len(CORZ_31_remaining_trading_days) / 252 #divide by 252 trading days in the average year to get trading years remaining (with decimals as needed)
 CORZ_29_remaining_trading_years = len(CORZ_29_remaining_trading_days) / 252 #divide by 252 trading days in the average year to get trading years remaining (with decimals as needed)
-CORZ_31_now = ConvertibleBond(initial_stock_price = 15.78, current_stock_price = 16.58, conversion_premium = 42.5, coupon = 0.0, maturity = 7, time_to_maturity = CORZ_31_remaining_trading_years, risk_free_rate = 3.95, credit_spread = 320, costofborrow = 50, equity_vol = 70, div_yield = 0)
-CORZ_29_now = ConvertibleBond(initial_stock_price = 8.46, current_stock_price = 16.58, conversion_premium = 30.0, coupon = 3.0, maturity = 5, time_to_maturity = CORZ_29_remaining_trading_years, risk_free_rate = 3.91, credit_spread = 300, costofborrow = 50, equity_vol = 70, div_yield = 0)
+CORZ_31_now = ConvertibleBond(initial_stock_price = 15.78, current_stock_price = 15.30, conversion_premium = 42.5, coupon = 0.0, maturity = 7, time_to_maturity = CORZ_31_remaining_trading_years, risk_free_rate = 3.95, credit_spread = 320, costofborrow = 50, equity_vol = 70, div_yield = 0)
+CORZ_29_now = ConvertibleBond(initial_stock_price = 8.46, current_stock_price = 15.30, conversion_premium = 30.0, coupon = 3.0, maturity = 5, time_to_maturity = CORZ_29_remaining_trading_years, risk_free_rate = 3.82, credit_spread = 300, costofborrow = 50, equity_vol = 70, div_yield = 0)
 
-print(f"CORZ 2031 0s up 42.5: \n At issue, BS: {CORZ_31_issue.BS_total_value()}, binom: {CORZ_31_issue.binomial_convert_value(steps = 1000, credit_decay = 0.4)} \n Current - {formatted_now}, BS: {CORZ_31_now.BS_total_value()}, binom: {CORZ_31_now.binomial_convert_value(steps = 1000, credit_decay = 0.4)} \n Greeks: {CORZ_31_now.BS_greeks()}")
-print(f"CORZ 2029 3s up 30.0: \n Current - {formatted_now}, BS: {CORZ_29_now.BS_total_value()}, binom: {CORZ_29_now.binomial_convert_value(steps = 1000, credit_decay = 0.4)}")
+print(f"CORZ 2031 0s up 42.5: \n At issue, BS: {CORZ_31_issue.BS_total_value()}, binom: {CORZ_31_issue.binomial_convert_value(steps = 1000, credit_decay = 0.2)} \n Current - {formatted_now}, BS: {CORZ_31_now.BS_total_value()}, binom: {CORZ_31_now.binomial_convert_value(steps = 1000, credit_decay = 0.2)} \n Greeks: {CORZ_31_now.BS_greeks()}")
+print(f"CORZ 2029 3s up 30.0: \n Current - {formatted_now}, BS: {CORZ_29_now.BS_total_value()}, binom: {CORZ_29_now.binomial_convert_value(steps = 1000, credit_decay = 0.4)} \n Greeks: {CORZ_29_now.BS_greeks()}")
