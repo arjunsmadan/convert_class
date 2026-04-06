@@ -226,10 +226,10 @@ CORZ_31_issue = ConvertibleBond(initial_stock_price = 15.78, current_stock_price
 
 #Remaining time to maturity, adjusted for holidays and weekends (real trading days)
 now = datetime(2026, 4, 6) #Prices as of close on this date
-formatted_now = now.strftime("%B %d, %Y")
+formatted_now = now.strftime("%B %d, %Y") #Format for printing
 CORZ_31_bond_maturity = datetime(2031, 6, 15)
 CORZ_29_bond_maturity = datetime(2029, 9, 1)
-nyse = mcal.get_calendar('NYSE')
+nyse = mcal.get_calendar('NYSE') #Trading days calendar
 CORZ_31_remaining_trading_days = nyse.valid_days(start_date = now, end_date = CORZ_31_bond_maturity)
 CORZ_29_remaining_trading_days = nyse.valid_days(start_date = now, end_date = CORZ_29_bond_maturity)
 CORZ_31_remaining_trading_years = len(CORZ_31_remaining_trading_days) / 252 #divide by 252 trading days in the average year to get trading years remaining (with decimals as needed)
