@@ -24,7 +24,6 @@ Assumptions in the class:
     Semiannual coupon payments
     Non-call life
     No investor put options
-    No bankrupcy risk
 
     Bond + Option Black Scholes pricing model
         Bond pricing - PV of cashflows from the debt
@@ -78,10 +77,6 @@ class ConvertibleBond:
             pv_coupons += coupon_payment * discount_factor * partial
 
         pv_par = self.par / ((1 + total_rate / freq) ** (self.time_to_maturity * freq))
-        #'''
-
-        #pv_par = self.par / ((1 + total_rate / freq) ** (full_periods + 1))
-
         total_value = pv_coupons + pv_par
 
         return total_value
@@ -221,11 +216,11 @@ print(f'Test bond: Black-scholes derived value: {cb.BS_total_value()}')
 print(f'Test bond: Binomial model value: {cb.binomial_convert_value(steps=250, credit_decay = 0)}') #credit decay 0 for bankruptcy off
 #print(cb.BS_greeks())
 
-#Pricing Core Scientific 0s up 42.5 2031 notes and 2029 3s up 30 notes
+#Core Scientific 0s up 42.5 2031 notes and 2029 3s up 30 notes
 CORZ_31_issue = ConvertibleBond(initial_stock_price = 15.78, current_stock_price = 15.78, conversion_premium = 42.5, coupon = 0, maturity = 7, time_to_maturity = 7, risk_free_rate = 4.5, credit_spread = 350, costofborrow = 50, equity_vol = 70, div_yield = 0)
 
 #Remaining time to maturity, adjusted for holidays and weekends (real trading days)
-now = datetime(2026, 4, 6) #Prices as of close on this date
+now = datetime(2026, 8, 17) #Prices as of close on this date
 formatted_now = now.strftime("%B %d, %Y") #Format for printing
 CORZ_31_bond_maturity = datetime(2031, 6, 15)
 CORZ_29_bond_maturity = datetime(2029, 9, 1)
@@ -234,8 +229,15 @@ CORZ_31_remaining_trading_days = nyse.valid_days(start_date = now, end_date = CO
 CORZ_29_remaining_trading_days = nyse.valid_days(start_date = now, end_date = CORZ_29_bond_maturity)
 CORZ_31_remaining_trading_years = len(CORZ_31_remaining_trading_days) / 252 #divide by 252 trading days in the average year to get trading years remaining (with decimals as needed)
 CORZ_29_remaining_trading_years = len(CORZ_29_remaining_trading_days) / 252 #divide by 252 trading days in the average year to get trading years remaining (with decimals as needed)
-CORZ_31_now = ConvertibleBond(initial_stock_price = 15.78, current_stock_price = 16.29, conversion_premium = 42.5, coupon = 0.0, maturity = 7, time_to_maturity = CORZ_31_remaining_trading_years, risk_free_rate = 3.92, credit_spread = 320, costofborrow = 50, equity_vol = 70, div_yield = 0)
-CORZ_29_now = ConvertibleBond(initial_stock_price = 8.46, current_stock_price = 16.29, conversion_premium = 30.0, coupon = 3.0, maturity = 5, time_to_maturity = CORZ_29_remaining_trading_years, risk_free_rate = 3.82, credit_spread = 300, costofborrow = 50, equity_vol = 55, div_yield = 0)
+CORZ_31_now = ConvertibleBond(initial_stock_price = 15.78, current_stock_price = 20.13, conversion_premium = 42.5, coupon = 0.0, maturity = 7, time_to_maturity = CORZ_31_remaining_trading_years, risk_free_rate = 4.37, credit_spread = 320, costofborrow = 50, equity_vol = 70, div_yield = 0)
+CORZ_29_now = ConvertibleBond(initial_stock_price = 8.46, current_stock_price = 20.13, conversion_premium = 30.0, coupon = 3.0, maturity = 5, time_to_maturity = CORZ_29_remaining_trading_years, risk_free_rate = 4.33, credit_spread = 300, costofborrow = 50, equity_vol = 55, div_yield = 0)
 
-print(f"CORZ 2031 0s up 42.5: \n At issue, BS: {CORZ_31_issue.BS_total_value()}, binom: {CORZ_31_issue.binomial_convert_value(steps = 1000, credit_decay = 0.2)} \n Current - {formatted_now}, BS: {CORZ_31_now.BS_total_value()}, binom: {CORZ_31_now.binomial_convert_value(steps = 1000, credit_decay = 0.4)} \n Greeks: {CORZ_31_now.BS_greeks()}")
+#Core Weave 2031 1.75% up 
+CRWV_31_bond_maturity = datetime(2031, 12, 1)
+CRWV_31_remaining_trading_days = nyse.valid_days(start_date = now, end_date = CRWV_31_bond_maturity)
+CRWV_31_remaining_trading_years = len(CRWV_31_remaining_trading_days) / 252 #divide by 252 trading days in the average year to get trading years remaining (with decimals as needed)
+CRWV_31_now = ConvertibleBond(initial_stock_price = 86.24, current_stock_price = 106.00, conversion_premium = 25.0, coupon = 1.75, maturity = 6, time_to_maturity = CRWV_31_remaining_trading_years, risk_free_rate = 4.37, credit_spread = 585, costofborrow = 50, equity_vol = 60, div_yield = 0)
+print(f"CRWV 2031 1.75% up 25.0: \n Current - {formatted_now}, BS: {CRWV_31_now.BS_total_value()}, binom: {CRWV_31_now.binomial_convert_value(steps = 1000, credit_decay = 0.5)}")
+
+print(f"CORZ 2031 0s up 42.5: \n At issue, BS: {CORZ_31_issue.BS_total_value()}, binom: {CORZ_31_issue.binomial_convert_value(steps = 1000, credit_decay = 0.2)} \n Current - {formatted_now}, BS: {CORZ_31_now.BS_total_value()}, binom: {CORZ_31_now.binomial_convert_value(steps = 1000, credit_decay = 0.2)} \n Greeks: {CORZ_31_now.BS_greeks()}")
 print(f"CORZ 2029 3s up 30.0: \n Current - {formatted_now}, BS: {CORZ_29_now.BS_total_value()}, binom: {CORZ_29_now.binomial_convert_value(steps = 1000, credit_decay = 0.2)} \n Greeks: {CORZ_29_now.BS_greeks()}")
