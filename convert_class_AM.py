@@ -3,6 +3,7 @@ from scipy.stats import norm
 import pandas as pd
 import pandas_market_calendars as mcal
 import matplotlib.pyplot as plt
+import copy
 from datetime import datetime, date
 
 '''
@@ -21,14 +22,13 @@ Inputs:
     costofborrow - borrow cost, in bps
 
 Assumptions in the class:
-    Semiannual coupon payments
     Non-call life
     No investor put options
 
     Bond + Option Black Scholes pricing model
         Bond pricing - PV of cashflows from the debt
         Option pricing - Black Scholes, assuming an effective dividend yield of div yield + borrow cost
-        Assumes option component behaves like a European equity call
+        Assumes semiannual coupon payments and that option component behaves like a European equity call
 
     Binomial Model Pricing
         Steps calculated for once a month unless specified as input
@@ -106,7 +106,7 @@ class ConvertibleBond:
         adj_calloption_value = calloption_value * conversion_ratio
         return adj_calloption_value
     
-    #Calculates bond greeks by scaling Black-Scholes derived option greeks
+    #Calculates convertible bond greeks by scaling or adding to Black-Scholes derived option greeks
     def BS_greeks(self):
         current_stock_price = self.current_stock_price
         strike = self.conversion_price
@@ -127,14 +127,16 @@ class ConvertibleBond:
         vega = (1/100) * current_stock_price * exp(effective_div_yield * time_to_maturity * -1) * sqrt(time_to_maturity) * norm.pdf(d1)
 
         bf = self.bond_floor()
-        ov = self.BS_option_value()
-        cvt_scale  = ov / (bf + ov)
+        tomorrow = copy.copy(self)
+        tomorrow.time_to_maturity -= 1 / 252
+        scaled_bond_theta = (tomorrow.bond_floor() - bf) / 10
 
         return {
-            "delta": float(round(delta * cvt_scale, 4)),
-            "gamma": float(round(gamma * cvt_scale, 6)), 
-            "theta": float(round(theta * cvt_scale, 8)),
-            "vega": float(round(vega * cvt_scale, 4))
+            "delta": float(round(delta, 4)),
+            "delta neutral shares": float(round(delta * conversion_ratio, 2)),
+            "gamma": float(round(gamma * conversion_ratio / 10, 6)), 
+            "theta": float(round(theta * conversion_ratio / 10 + scaled_bond_theta, 6)),
+            "vega": float(round(vega * conversion_ratio / 10, 4))
         }
 
     #Calculates bond value by adding the bond floor to the Black-Scholes derived option price (scaled by conversion ratio)
@@ -169,11 +171,7 @@ class ConvertibleBond:
         up = exp(equity_vol * sqrt(dt)) #scales annualized vol
         down = 1 / up
 
-        #Risk neutral probability under effective div yield. Uses base credit spread (no decay factor) here for risk neutral calculations
         effective_div_yield = div_yield + costofborrow
-        r_base = risk_free_rate + credit_spread
-
-        p = (exp((r_base - effective_div_yield) * dt) - down) / (up - down)
 
         #Precompute underlying equity price tree
         equity_tree = [[0 for j in range(i + 1)] for i in range(steps + 1)]
@@ -193,11 +191,14 @@ class ConvertibleBond:
         coupon_carry = par * coupon * dt
 
         #Backward induction to complete the tree
+        #Stock drift calculated at same decayed spread used to discount below
         for i in range(steps - 1, -1, -1):
             for j in range(i + 1):
-                EV = p * convert_tree[i+1][j+1] + (1-p) * convert_tree[i+1][j]
                 stock = equity_tree[i][j]
                 adj_credit = credit_spread * (current_stock_price / stock) ** credit_decay #So that credit spread scales appropriately with the credit decay factor based on the indivudal node, relative to current stock price (i.e., the precomputed stock price at each node of the equity tree helps determine the credit decay at that specific node)
+                equity_drift = min(risk_free_rate - effective_div_yield + adj_credit, equity_vol / sqrt(dt)) #We cap the equity drift at equity_vol / sqrt(dt), the up move, since adj_credit diverges as stock -> 0
+                p = (exp(equity_drift *  dt) - down) / (up - down)
+                EV = p * convert_tree[i+1][j+1] + (1-p) * convert_tree[i+1][j]
                 adj_r = risk_free_rate + adj_credit #R also computed at each indivudal node independently, with the new adjusted credit spread line above
                 EV = (EV + coupon_carry) * exp(-adj_r * dt) #add coupon and discount
                 converted_value = stock * conversion_ratio
@@ -220,7 +221,7 @@ print(f'Test bond: Binomial model value: {cb.binomial_convert_value(steps=250, c
 CORZ_31_issue = ConvertibleBond(initial_stock_price = 15.78, current_stock_price = 15.78, conversion_premium = 42.5, coupon = 0, maturity = 7, time_to_maturity = 7, risk_free_rate = 4.5, credit_spread = 350, costofborrow = 50, equity_vol = 70, div_yield = 0)
 
 #Remaining time to maturity, adjusted for holidays and weekends (real trading days)
-now = datetime(2026, 8, 17) #Prices as of close on this date
+now = datetime(2026, 9, 14) #Prices as of close on this date
 formatted_now = now.strftime("%B %d, %Y") #Format for printing
 CORZ_31_bond_maturity = datetime(2031, 6, 15)
 CORZ_29_bond_maturity = datetime(2029, 9, 1)
@@ -229,15 +230,15 @@ CORZ_31_remaining_trading_days = nyse.valid_days(start_date = now, end_date = CO
 CORZ_29_remaining_trading_days = nyse.valid_days(start_date = now, end_date = CORZ_29_bond_maturity)
 CORZ_31_remaining_trading_years = len(CORZ_31_remaining_trading_days) / 252 #divide by 252 trading days in the average year to get trading years remaining (with decimals as needed)
 CORZ_29_remaining_trading_years = len(CORZ_29_remaining_trading_days) / 252 #divide by 252 trading days in the average year to get trading years remaining (with decimals as needed)
-CORZ_31_now = ConvertibleBond(initial_stock_price = 15.78, current_stock_price = 20.13, conversion_premium = 42.5, coupon = 0.0, maturity = 7, time_to_maturity = CORZ_31_remaining_trading_years, risk_free_rate = 4.37, credit_spread = 440, costofborrow = 50, equity_vol = 70, div_yield = 0)
-CORZ_29_now = ConvertibleBond(initial_stock_price = 8.46, current_stock_price = 20.13, conversion_premium = 30.0, coupon = 3.0, maturity = 5, time_to_maturity = CORZ_29_remaining_trading_years, risk_free_rate = 4.33, credit_spread = 420, costofborrow = 50, equity_vol = 70, div_yield = 0)
+CORZ_31_now = ConvertibleBond(initial_stock_price = 15.78, current_stock_price = 16.96, conversion_premium = 42.5, coupon = 0.0, maturity = 7, time_to_maturity = CORZ_31_remaining_trading_years, risk_free_rate = 4.84, credit_spread = 440, costofborrow = 50, equity_vol = 70, div_yield = 0)
+CORZ_29_now = ConvertibleBond(initial_stock_price = 8.46, current_stock_price = 16.96, conversion_premium = 30.0, coupon = 3.0, maturity = 5, time_to_maturity = CORZ_29_remaining_trading_years, risk_free_rate = 4.85, credit_spread = 420, costofborrow = 50, equity_vol = 70, div_yield = 0)
 
-#Core Weave 2031 1.75% up 
+#Core Weave 2031 1.75% up 25
 CRWV_31_bond_maturity = datetime(2031, 12, 1)
 CRWV_31_remaining_trading_days = nyse.valid_days(start_date = now, end_date = CRWV_31_bond_maturity)
 CRWV_31_remaining_trading_years = len(CRWV_31_remaining_trading_days) / 252 #divide by 252 trading days in the average year to get trading years remaining (with decimals as needed)
-CRWV_31_now = ConvertibleBond(initial_stock_price = 86.24, current_stock_price = 106.00, conversion_premium = 25.0, coupon = 1.75, maturity = 6, time_to_maturity = CRWV_31_remaining_trading_years, risk_free_rate = 4.37, credit_spread = 700, costofborrow = 75, equity_vol = 60, div_yield = 0)
-print(f"CRWV 2031 1.75% up 25.0: \n Current - {formatted_now}, BS: {CRWV_31_now.BS_total_value()}, binom: {CRWV_31_now.binomial_convert_value(steps = 1000, credit_decay = 0.5)}")
+CRWV_31_now = ConvertibleBond(initial_stock_price = 86.24, current_stock_price = 82.98, conversion_premium = 25.0, coupon = 1.75, maturity = 6, time_to_maturity = CRWV_31_remaining_trading_years, risk_free_rate = 4.84, credit_spread = 700, costofborrow = 75, equity_vol = 60, div_yield = 0)
+print(f"CRWV 2031 1.75% up 25.0: \n Current - {formatted_now}, BS: {CRWV_31_now.BS_total_value()}, binom: {CRWV_31_now.binomial_convert_value(steps = 1000, credit_decay = 0.5)} \n Greeks: {CRWV_31_now.BS_greeks()}")
 
 print(f"CORZ 2031 0s up 42.5: \n At issue, BS: {CORZ_31_issue.BS_total_value()}, binom: {CORZ_31_issue.binomial_convert_value(steps = 1000, credit_decay = 0.2)} \n Current - {formatted_now}, BS: {CORZ_31_now.BS_total_value()}, binom: {CORZ_31_now.binomial_convert_value(steps = 1000, credit_decay = 0.2)} \n Greeks: {CORZ_31_now.BS_greeks()}")
 print(f"CORZ 2029 3s up 30.0: \n Current - {formatted_now}, BS: {CORZ_29_now.BS_total_value()}, binom: {CORZ_29_now.binomial_convert_value(steps = 1000, credit_decay = 0.2)} \n Greeks: {CORZ_29_now.BS_greeks()}")
