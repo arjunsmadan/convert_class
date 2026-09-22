@@ -221,24 +221,37 @@ print(f'Test bond: Binomial model value: {cb.binomial_convert_value(steps=250, c
 CORZ_31_issue = ConvertibleBond(initial_stock_price = 15.78, current_stock_price = 15.78, conversion_premium = 42.5, coupon = 0, maturity = 7, time_to_maturity = 7, risk_free_rate = 4.5, credit_spread = 350, costofborrow = 50, equity_vol = 70, div_yield = 0)
 
 #Remaining time to maturity, adjusted for holidays and weekends (real trading days)
-now = datetime(2026, 9, 14) #Prices as of close on this date
+now = datetime(2026, 9, 22) #Prices as of close on this date
+CORZ_current_price = 18.79
+CRWV_current_price = 86.76
+AKAM_current_price = 118.34
+
 formatted_now = now.strftime("%B %d, %Y") #Format for printing
-CORZ_31_bond_maturity = datetime(2031, 6, 15)
-CORZ_29_bond_maturity = datetime(2029, 9, 1)
+
+CORZ_31_bond_maturity = datetime(2031, 6, 15) #CUSIP 21874AAE6
+CORZ_29_bond_maturity = datetime(2029, 9, 1) #CUSIP 21874AAC0
 nyse = mcal.get_calendar('NYSE') #Trading days calendar
 CORZ_31_remaining_trading_days = nyse.valid_days(start_date = now, end_date = CORZ_31_bond_maturity)
 CORZ_29_remaining_trading_days = nyse.valid_days(start_date = now, end_date = CORZ_29_bond_maturity)
 CORZ_31_remaining_trading_years = len(CORZ_31_remaining_trading_days) / 252 #divide by 252 trading days in the average year to get trading years remaining (with decimals as needed)
 CORZ_29_remaining_trading_years = len(CORZ_29_remaining_trading_days) / 252 #divide by 252 trading days in the average year to get trading years remaining (with decimals as needed)
-CORZ_31_now = ConvertibleBond(initial_stock_price = 15.78, current_stock_price = 16.96, conversion_premium = 42.5, coupon = 0.0, maturity = 7, time_to_maturity = CORZ_31_remaining_trading_years, risk_free_rate = 4.84, credit_spread = 440, costofborrow = 50, equity_vol = 70, div_yield = 0)
-CORZ_29_now = ConvertibleBond(initial_stock_price = 8.46, current_stock_price = 16.96, conversion_premium = 30.0, coupon = 3.0, maturity = 5, time_to_maturity = CORZ_29_remaining_trading_years, risk_free_rate = 4.85, credit_spread = 420, costofborrow = 50, equity_vol = 70, div_yield = 0)
+CORZ_31_now = ConvertibleBond(initial_stock_price = 15.78, current_stock_price = CORZ_current_price, conversion_premium = 42.5, coupon = 0.0, maturity = 7, time_to_maturity = CORZ_31_remaining_trading_years, risk_free_rate = 4.85, credit_spread = 440, costofborrow = 50, equity_vol = 70, div_yield = 0)
+CORZ_29_now = ConvertibleBond(initial_stock_price = 8.46, current_stock_price = CORZ_current_price, conversion_premium = 30.0, coupon = 3.0, maturity = 5, time_to_maturity = CORZ_29_remaining_trading_years, risk_free_rate = 4.90, credit_spread = 420, costofborrow = 50, equity_vol = 70, div_yield = 0)
 
 #Core Weave 2031 1.75% up 25
-CRWV_31_bond_maturity = datetime(2031, 12, 1)
+CRWV_31_bond_maturity = datetime(2031, 12, 1) #CUSIP 21873SAD0
 CRWV_31_remaining_trading_days = nyse.valid_days(start_date = now, end_date = CRWV_31_bond_maturity)
 CRWV_31_remaining_trading_years = len(CRWV_31_remaining_trading_days) / 252 #divide by 252 trading days in the average year to get trading years remaining (with decimals as needed)
-CRWV_31_now = ConvertibleBond(initial_stock_price = 86.24, current_stock_price = 82.98, conversion_premium = 25.0, coupon = 1.75, maturity = 6, time_to_maturity = CRWV_31_remaining_trading_years, risk_free_rate = 4.84, credit_spread = 700, costofborrow = 75, equity_vol = 60, div_yield = 0)
+CRWV_31_now = ConvertibleBond(initial_stock_price = 86.24, current_stock_price = CRWV_current_price, conversion_premium = 25.0, coupon = 1.75, maturity = 6, time_to_maturity = CRWV_31_remaining_trading_years, risk_free_rate = 4.85, credit_spread = 700, costofborrow = 75, equity_vol = 60, div_yield = 0)
 print(f"CRWV 2031 1.75% up 25.0: \n Current - {formatted_now}, BS: {CRWV_31_now.BS_total_value()}, binom: {CRWV_31_now.binomial_convert_value(steps = 1000, credit_decay = 0.5)} \n Greeks: {CRWV_31_now.BS_greeks()}")
 
 print(f"CORZ 2031 0s up 42.5: \n At issue, BS: {CORZ_31_issue.BS_total_value()}, binom: {CORZ_31_issue.binomial_convert_value(steps = 1000, credit_decay = 0.2)} \n Current - {formatted_now}, BS: {CORZ_31_now.BS_total_value()}, binom: {CORZ_31_now.binomial_convert_value(steps = 1000, credit_decay = 0.2)} \n Greeks: {CORZ_31_now.BS_greeks()}")
 print(f"CORZ 2029 3s up 30.0: \n Current - {formatted_now}, BS: {CORZ_29_now.BS_total_value()}, binom: {CORZ_29_now.binomial_convert_value(steps = 1000, credit_decay = 0.2)} \n Greeks: {CORZ_29_now.BS_greeks()}")
+
+#Akamai 0.375% up 30
+AKAM_27_bond_maturity = datetime(2027, 9, 1) #CUSIP 00971TAL5
+AKAM_27_remaining_trading_days = nyse.valid_days(start_date = now, end_date = AKAM_27_bond_maturity)
+AKAM_27_remaining_trading_years = len(AKAM_27_remaining_trading_days) / 252
+AKAM_27_now = ConvertibleBond(initial_stock_price = 89.37, current_stock_price = AKAM_current_price, conversion_premium = 30.0, coupon = 0.375, maturity = 8, time_to_maturity = AKAM_27_remaining_trading_years, risk_free_rate = 4.77, credit_spread = 100, costofborrow = 50, equity_vol = 45, div_yield = 0)
+
+print(f"AKAM 2027 0.375% up 30: \n Current - {formatted_now}, BS: {AKAM_27_now.BS_total_value()}, binom: {AKAM_27_now.binomial_convert_value(steps = 1000, credit_decay = 0.0)} \n Greeks: {AKAM_27_now.BS_greeks()}")
