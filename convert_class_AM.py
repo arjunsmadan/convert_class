@@ -257,3 +257,41 @@ AKAM_27_now = ConvertibleBond(initial_stock_price = 89.37, current_stock_price =
 
 print("\n")
 print(f"AKAM 2027 0.375% up 30: \n Current - {formatted_now}, BS: {AKAM_27_now.BS_total_value()}, binom: {AKAM_27_now.binomial_convert_value(steps = 1000, credit_decay = 0.5)} \n Greeks: {AKAM_27_now.BS_greeks()}")
+
+#Prices at a given day. Inputs below
+    #bond_terms dictionary of bond assumptions, some of which get written over in a copy
+    #stock_price underlying stock price at the valuation date
+    #maturity_date datetime for the bond's maturity
+    #valuation_date datetime of day being priced
+#Returns dictionary of stock price, time to maturity, convertible theo value, and convertible greeks
+def price_day(bond_terms, stock_price, maturity_date, valuation_date):
+    terms = bond_terms.copy()
+    terms["current_stock_price"] = stock_price
+    remaining_trading_days = nyse.valid_days(start_date = valuation_date, end_date = maturity_date)
+    remaining_trading_years = len(remaining_trading_days) / 252
+    terms["time_to_maturity"] = remaining_trading_years
+
+    bond = ConvertibleBond(**terms)
+
+    return {
+        "stock price": stock_price,
+        "time to maturity": remaining_trading_years,
+        "theo": bond.BS_total_value(),
+        "parity": round(bond.current_stock_price * bond.conversion_ratio / 10, 2), #scales to 100 vs 1000
+        **bond.BS_greeks()
+    }
+
+AKAM_27_terms = {
+    "initial_stock_price": 89.37,
+    "conversion_premium": 30,
+    "coupon": 0.375,
+    "maturity": 8,
+    "risk_free_rate": 4.77,
+    "credit_spread": 100,
+    "equity_vol": 45,
+    "div_yield": 0,
+    "costofborrow": 50
+}
+
+print("\n")
+print(price_day(bond_terms = AKAM_27_terms, stock_price = AKAM_price_now, maturity_date = AKAM_27_bond_maturity, valuation_date = now))
