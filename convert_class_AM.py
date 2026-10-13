@@ -3,8 +3,10 @@ from scipy.stats import norm
 import pandas as pd
 import pandas_market_calendars as mcal
 import matplotlib.pyplot as plt
+import numpy as np
 import copy
 from datetime import datetime, date
+import yfinance as yf
 
 '''
 Convertible Bond Class
@@ -33,7 +35,19 @@ Assumptions in the class:
     Binomial Model Pricing
         Steps calculated for once a month unless specified as input
         Includes credit decay factor (defaults to 0.5) that scales base credit spread to return an independent adjusted credit spread at each node in the equity price tree
-            Similar to Kynex bankruptcy ON model    
+            Similar to Kynex bankruptcy ON model
+
+Included uses of the class:
+    Test cases of indivudal convertible bond objects
+
+    Current theoretical prices & greeks for: 
+        CORZ 2031 0s up 42.5
+        CORZ 2029 3s up 30.0
+        CRWV 2031 1.75% up 25.0
+        AKAM 2027 0.375% up 30.0
+    
+    Gamma scalping backtest and PNL attribution for AKAM 2027 0.375% up 30.0
+
 '''
 
 class ConvertibleBond:
@@ -132,16 +146,16 @@ class ConvertibleBond:
         scaled_bond_theta = (tomorrow.bond_floor() - bf) / 10
 
         return {
-            "delta": float(round(delta, 4)),
-            "delta neutral shares": float(round(delta * conversion_ratio, 2)),
-            "gamma": float(round(gamma * conversion_ratio / 10, 6)), 
-            "theta": float(round(theta * conversion_ratio / 10 + scaled_bond_theta, 6)),
-            "vega": float(round(vega * conversion_ratio / 10, 4))
+            "delta": float(delta),
+            "delta neutral shares": float(delta * conversion_ratio),
+            "gamma": float(gamma * conversion_ratio / 10), 
+            "theta": float(theta * conversion_ratio / 10 + scaled_bond_theta),
+            "vega": float(vega * conversion_ratio / 10)
         }
 
     #Calculates bond value by adding the bond floor to the Black-Scholes derived option price (scaled by conversion ratio)
     def BS_total_value(self):
-        return round((self.bond_floor() + self.BS_option_value()) / 10, 2)
+        return (self.bond_floor() + self.BS_option_value()) / 10
     
     #Calculates bond value based on binomial pricing model
     #   The variable credit_decay as an input indicates the decay factor at which credit widens in an equity downside case (or tightens in an equity upside case)
@@ -206,23 +220,76 @@ class ConvertibleBond:
                 value = max(EV, converted_value)
                 convert_tree[i][j] = value
         
-        return round(convert_tree[0][0] / 10, 2)
+        return convert_tree[0][0] / 10
     
     #Resets current stock price for existing bond object
     def set_stock_price(self, new_price):
         self.current_stock_price = new_price
 
+#Prices at a given day. Inputs below
+    #bond_terms dictionary of bond assumptions, some of which get written over in a copy
+    #stock_price underlying stock price at the valuation date
+    #maturity_date datetime for the bond's maturity
+    #valuation_date datetime of day being priced
+#Returns dictionary of stock price, time to maturity, convertible theo value, and convertible greeks
+def price_day(bond_terms, current_stock_price, maturity_date, valuation_date):
+    terms = bond_terms.copy()
+    terms["current_stock_price"] = current_stock_price
+    remaining_trading_days = nyse.valid_days(start_date = valuation_date, end_date = maturity_date)
+    remaining_trading_years = len(remaining_trading_days) / 252
+    terms["time_to_maturity"] = remaining_trading_years
+
+    bond = ConvertibleBond(**terms)
+
+    return {
+        "current stock price": current_stock_price,
+        "time to maturity": remaining_trading_years,
+        "theo": bond.BS_total_value(),
+        "conversion ratio": bond.conversion_ratio,
+        "parity": bond.current_stock_price * bond.conversion_ratio / 10, #scales to 100 vs 1000
+        **bond.BS_greeks()
+    }
+
+#Rounds values in dictionary
+    #Made for rounding greeks easily, without having the actual numbers returned by the original greeks function rounded
+    #Defaults to 4 decimals for the entire dictionary. 
+    #Can also take a dictionary argument decimals_by_key, that specificies specific decimal round cases for each key in dictionary
+def round_dict(values, decimals = 4, decimals_by_key = None):
+    rounded_values = {}
+    for key, value in values.items():
+        if not isinstance(value, float):
+            rounded_values[key] = value
+            continue
+
+        if decimals_by_key is not None and key in decimals_by_key:
+            rounded_values[key] = round(value, decimals_by_key[key])
+        else:
+            rounded_values[key] = round(value, decimals)
+
+    return rounded_values
+
+greek_decimals = {
+    "delta": 4,
+    "delta neutral shares": 2,
+    "gamma": 6,
+    "theta": 6,
+    "vega": 4
+}
+
+def round_greeks(greeks):
+    return round_dict(greeks, decimals_by_key = greek_decimals)
+
 cb = ConvertibleBond(initial_stock_price = 100, current_stock_price = 130, conversion_premium = 35, coupon = 3.5, maturity = 5, time_to_maturity = 5, risk_free_rate = 3.95, credit_spread = 250, costofborrow = 50, equity_vol = 40, div_yield = 2.0)
-print(f'Test bond: Black-scholes derived value: {cb.BS_total_value()}')
-print(f'Test bond: Binomial model value: {cb.binomial_convert_value(steps=250, credit_decay = 0)}') #credit decay 0 for bankruptcy off
+print(f'Test bond: Black-scholes derived value: {round(cb.BS_total_value(), 2)}')
+print(f'Test bond: Binomial model value: {round(cb.binomial_convert_value(steps=250, credit_decay = 0), 2)}') #credit decay 0 for bankruptcy off
 print("\n")
 #print(cb.BS_greeks())
 
 #Current data (update ALL 4 when refreshing)
-now = datetime(2026, 9, 22) #Prices as of close on this date
-CORZ_price_now = 18.79
-CRWV_price_now = 86.76
-AKAM_price_now = 118.34
+now = datetime(2026, 10, 12) #Prices as of close on this date
+CORZ_price_now = 15.02
+CRWV_price_now = 80.26
+AKAM_price_now = 101.65
 
 formatted_now = now.strftime("%B %d, %Y") #Format for printing
 
@@ -235,63 +302,206 @@ CORZ_31_remaining_trading_days = nyse.valid_days(start_date = now, end_date = CO
 CORZ_29_remaining_trading_days = nyse.valid_days(start_date = now, end_date = CORZ_29_bond_maturity)
 CORZ_31_remaining_trading_years = len(CORZ_31_remaining_trading_days) / 252 #divide by 252 trading days in the average year to get trading years remaining (with decimals as needed)
 CORZ_29_remaining_trading_years = len(CORZ_29_remaining_trading_days) / 252 #divide by 252 trading days in the average year to get trading years remaining (with decimals as needed)
-CORZ_31_now = ConvertibleBond(initial_stock_price = 15.78, current_stock_price = CORZ_price_now, conversion_premium = 42.5, coupon = 0.0, maturity = 7, time_to_maturity = CORZ_31_remaining_trading_years, risk_free_rate = 4.85, credit_spread = 440, costofborrow = 50, equity_vol = 70, div_yield = 0)
-CORZ_29_now = ConvertibleBond(initial_stock_price = 8.46, current_stock_price = CORZ_price_now, conversion_premium = 30.0, coupon = 3.0, maturity = 5, time_to_maturity = CORZ_29_remaining_trading_years, risk_free_rate = 4.90, credit_spread = 420, costofborrow = 50, equity_vol = 70, div_yield = 0)
+CORZ_31_now = ConvertibleBond(initial_stock_price = 15.78, current_stock_price = CORZ_price_now, conversion_premium = 42.5, coupon = 0.0, maturity = 7, time_to_maturity = CORZ_31_remaining_trading_years, risk_free_rate = 4.97, credit_spread = 440, costofborrow = 50, equity_vol = 70, div_yield = 0)
+CORZ_29_now = ConvertibleBond(initial_stock_price = 8.46, current_stock_price = CORZ_price_now, conversion_premium = 30.0, coupon = 3.0, maturity = 5, time_to_maturity = CORZ_29_remaining_trading_years, risk_free_rate = 4.96, credit_spread = 420, costofborrow = 50, equity_vol = 70, div_yield = 0)
 
 #Core Weave 2031 1.75% up 25
 CRWV_31_bond_maturity = datetime(2031, 12, 1) #CUSIP 21873SAD0
 CRWV_31_remaining_trading_days = nyse.valid_days(start_date = now, end_date = CRWV_31_bond_maturity)
 CRWV_31_remaining_trading_years = len(CRWV_31_remaining_trading_days) / 252 #divide by 252 trading days in the average year to get trading years remaining (with decimals as needed)
-CRWV_31_now = ConvertibleBond(initial_stock_price = 86.24, current_stock_price = CRWV_price_now, conversion_premium = 25.0, coupon = 1.75, maturity = 6, time_to_maturity = CRWV_31_remaining_trading_years, risk_free_rate = 4.85, credit_spread = 700, costofborrow = 75, equity_vol = 60, div_yield = 0)
+CRWV_31_now = ConvertibleBond(initial_stock_price = 86.24, current_stock_price = CRWV_price_now, conversion_premium = 25.0, coupon = 1.75, maturity = 6, time_to_maturity = CRWV_31_remaining_trading_years, risk_free_rate = 4.97, credit_spread = 700, costofborrow = 75, equity_vol = 60, div_yield = 0)
 
-print(f"CORZ 2031 0s up 42.5: \n At issue, BS: {CORZ_31_issue.BS_total_value()}, binom: {CORZ_31_issue.binomial_convert_value(steps = 1000, credit_decay = 0.2)} \n Current - {formatted_now}, BS: {CORZ_31_now.BS_total_value()}, binom: {CORZ_31_now.binomial_convert_value(steps = 1000, credit_decay = 0.2)} \n Greeks: {CORZ_31_now.BS_greeks()}")
-print(f"CORZ 2029 3s up 30.0: \n Current - {formatted_now}, BS: {CORZ_29_now.BS_total_value()}, binom: {CORZ_29_now.binomial_convert_value(steps = 1000, credit_decay = 0.2)} \n Greeks: {CORZ_29_now.BS_greeks()}")
+print(f"CORZ 2031 0s up 42.5: \n At issue, BS: {round(CORZ_31_issue.BS_total_value(), 2)}, binom: {round(CORZ_31_issue.binomial_convert_value(steps = 1000, credit_decay = 0.2), 2)} \n Current - {formatted_now}, BS: {round(CORZ_31_now.BS_total_value(), 2)}, binom: {round(CORZ_31_now.binomial_convert_value(steps = 1000, credit_decay = 0.2), 2)} \n Greeks: {round_greeks(CORZ_31_now.BS_greeks())}")
+print(f"CORZ 2029 3s up 30.0: \n Current - {formatted_now}, BS: {round(CORZ_29_now.BS_total_value(), 2)}, binom: {round(CORZ_29_now.binomial_convert_value(steps = 1000, credit_decay = 0.2), 2)} \n Greeks: {round_greeks(CORZ_29_now.BS_greeks())}")
 print("\n")
-print(f"CRWV 2031 1.75% up 25.0: \n Current - {formatted_now}, BS: {CRWV_31_now.BS_total_value()}, binom: {CRWV_31_now.binomial_convert_value(steps = 1000, credit_decay = 0.5)} \n Greeks: {CRWV_31_now.BS_greeks()}")
+print(f"CRWV 2031 1.75% up 25.0: \n Current - {formatted_now}, BS: {round(CRWV_31_now.BS_total_value(), 2)}, binom: {round(CRWV_31_now.binomial_convert_value(steps = 1000, credit_decay = 0.5), 2)} \n Greeks: {round_greeks(CRWV_31_now.BS_greeks())}")
 
 #Akamai 0.375% up 30
 AKAM_27_bond_maturity = datetime(2027, 9, 1) #CUSIP 00971TAL5
 AKAM_27_remaining_trading_days = nyse.valid_days(start_date = now, end_date = AKAM_27_bond_maturity)
 AKAM_27_remaining_trading_years = len(AKAM_27_remaining_trading_days) / 252
-AKAM_27_now = ConvertibleBond(initial_stock_price = 89.37, current_stock_price = AKAM_price_now, conversion_premium = 30.0, coupon = 0.375, maturity = 8, time_to_maturity = AKAM_27_remaining_trading_years, risk_free_rate = 4.77, credit_spread = 100, costofborrow = 50, equity_vol = 45, div_yield = 0)
+AKAM_27_now = ConvertibleBond(initial_stock_price = 89.37, current_stock_price = AKAM_price_now, conversion_premium = 30.0, coupon = 0.375, maturity = 8, time_to_maturity = AKAM_27_remaining_trading_years, risk_free_rate = 4.75, credit_spread = 100, costofborrow = 50, equity_vol = 45, div_yield = 0)
 
 print("\n")
-print(f"AKAM 2027 0.375% up 30: \n Current - {formatted_now}, BS: {AKAM_27_now.BS_total_value()}, binom: {AKAM_27_now.binomial_convert_value(steps = 1000, credit_decay = 0.5)} \n Greeks: {AKAM_27_now.BS_greeks()}")
+print(f"AKAM 2027 0.375% up 30: \n Current - {formatted_now}, BS: {round(AKAM_27_now.BS_total_value(), 2)}, binom: {round(AKAM_27_now.binomial_convert_value(steps = 1000, credit_decay = 0.5), 2)} \n Greeks: {round_greeks(AKAM_27_now.BS_greeks())}")
 
-#Prices at a given day. Inputs below
-    #bond_terms dictionary of bond assumptions, some of which get written over in a copy
-    #stock_price underlying stock price at the valuation date
-    #maturity_date datetime for the bond's maturity
-    #valuation_date datetime of day being priced
-#Returns dictionary of stock price, time to maturity, convertible theo value, and convertible greeks
-def price_day(bond_terms, stock_price, maturity_date, valuation_date):
-    terms = bond_terms.copy()
-    terms["current_stock_price"] = stock_price
-    remaining_trading_days = nyse.valid_days(start_date = valuation_date, end_date = maturity_date)
-    remaining_trading_years = len(remaining_trading_days) / 252
-    terms["time_to_maturity"] = remaining_trading_years
-
-    bond = ConvertibleBond(**terms)
-
-    return {
-        "stock price": stock_price,
-        "time to maturity": remaining_trading_years,
-        "theo": bond.BS_total_value(),
-        "parity": round(bond.current_stock_price * bond.conversion_ratio / 10, 2), #scales to 100 vs 1000
-        **bond.BS_greeks()
-    }
-
+#Example dictionary consolidating certain terms for AKAM 2027, such that can be priced with ease on various different days using the price_day function 
+'''
 AKAM_27_terms = {
     "initial_stock_price": 89.37,
     "conversion_premium": 30,
     "coupon": 0.375,
     "maturity": 8,
-    "risk_free_rate": 4.77,
+    "risk_free_rate": 4.75,
+    "credit_spread": 100,
+    "equity_vol": 45,
+    "div_yield": 0,
+    "costofborrow": 50
+}
+print(price_day(bond_terms = AKAM_27_terms, current_stock_price = AKAM_price_now, maturity_date = AKAM_27_bond_maturity, valuation_date = now))
+'''
+
+print("\n")
+
+#Gamma scalping backtest run
+    #Selected period of 50 trading days. AKAM 0.375% up 30 2027, held delta neutral vs. AKAM underlying stock
+    #Daily stock prices pulled as close prices from Yahoo finance
+    #Calculates PNL daily, with attribution to gamma as well as theta losses / time decay
+    #Rebalances the underlying equity short daily, referencing the difference between previous day and current day delta
+        #Cost of borrow for the short position not included in PNL numbers, though it is included as a necessary imput to any ConvertibleBond() object. Assumed GC / 50 bp for AKAM 
+    
+    #All convertible price data (incl. greeks) assumed to be theoretical values as per the Black-Scholes + bond floor model in the convertible bond class
+        ##Though I prefer the binomial_convert_value(self, steps, credit_decay) function for independent convertible valuation, 
+        ## used Black-Scholes here to keep consistent with how the greeks are calculated in the class, given how greeks are driving this trade backtest
+        
+    ##Note: can vary assumptions included in the below AKAM_27_backtest terms dictionary, and see relevant change in PNL numbers based on model changes
+    ##E.g. bring vol assumption down to 40, will output higher PNL over the course of the backtest, showing a case in which realized vol beats implied by considerably more
+            ###describes a theoreical case in which implied vol to start, and over the course of the trade, were lower
+
+#Dictionary of constant assumptions / inputs
+    #Backtest assumes a constant risk free rate, assumed credit spread, assumed volatility, and cost of borrow
+AKAM_27_backtest_terms = {
+    "initial_stock_price": 89.37,
+    "conversion_premium": 30,
+    "coupon": 0.375,
+    "maturity": 8,
+    "risk_free_rate": 4.39, #Avg. 1yr treasury swap over the period of time in the backtest
     "credit_spread": 100,
     "equity_vol": 45,
     "div_yield": 0,
     "costofborrow": 50
 }
 
-print("\n")
-print(price_day(bond_terms = AKAM_27_terms, stock_price = AKAM_price_now, maturity_date = AKAM_27_bond_maturity, valuation_date = now))
+AKAM_stock_prices = yf.download("AKAM", start="2026-07-10", end="2026-09-19")["Close"]["AKAM"]
+print("yahoo finance historical data downloaded")
+print(AKAM_stock_prices.head(1))
+print(AKAM_stock_prices.tail(1))
+
+daily_pricing = []
+backtest_dates = []
+
+for val_date, stock_price in AKAM_stock_prices.items():
+    daily_pricing_row = price_day(
+        bond_terms = AKAM_27_backtest_terms,
+        current_stock_price = stock_price,
+        maturity_date = AKAM_27_bond_maturity,
+        valuation_date = val_date
+    )
+    daily_pricing.append(daily_pricing_row)
+    backtest_dates.append(val_date)
+
+AKAM_27_daily_pricing = pd.DataFrame(daily_pricing, index = backtest_dates)
+AKAM_27_daily_pricing.index.name = "date"
+
+#print(price_day(bond_terms = AKAM_27_backtest_terms, current_stock_price = 108.62, maturity_date = AKAM_27_bond_maturity, valuation_date = datetime(2026, 8, 31))["theo"])
+#print(price_day(bond_terms = AKAM_27_backtest_terms, current_stock_price = 108.62, maturity_date = AKAM_27_bond_maturity, valuation_date = datetime(2026, 9, 2))["theo"])
+
+AKAM_27_face_held = 10000000 #$10MM bond face for simulated trade
+AKAM_27_bonds_held = AKAM_27_face_held / 1000
+points_to_dollars = AKAM_27_face_held / 100
+
+backtest_rows = []
+shares_short = 0
+cash = 0
+previous_row = None
+
+
+for val_date, daily_row in AKAM_27_daily_pricing.iterrows():
+    stock_price = daily_row["current stock price"]
+    theo = daily_row["theo"]
+    delta = daily_row["delta"]
+    conversion_shares = daily_row["conversion ratio"] * AKAM_27_bonds_held
+
+    if previous_row is None:
+        #Day one only passes this if statement, to buy the bond, no P&L yet
+        bond_pnl = 0
+        equity_pnl = 0
+        delta_pnl_predicted = 0
+        gamma_pnl_predicted = 0
+        theta_pnl_predicted = 0
+        bond_pnl_predicted = 0
+        residual = 0
+        cash = cash - (theo * points_to_dollars)
+    
+    else:
+        #P&L on yesterday's position, marked at today's prices
+        #Coupon cash flows over coupon payment dates are excluded here, as the model prices them into theo
+        bond_pnl = (theo - previous_row["theo"]) * points_to_dollars
+        equity_pnl = -shares_short * (stock_price - previous_row["current stock price"])
+
+        ##Greek attribution
+        stock_move = stock_price - previous_row["current stock price"]
+        #Previous day delta expressed in points of theo per $1 of stock
+        previous_delta_points = previous_row["delta"] * previous_row["conversion ratio"] / 10
+
+        delta_pnl_predicted = previous_delta_points * stock_move * points_to_dollars
+        gamma_pnl_predicted = 0.5 * previous_row["gamma"] * (stock_move ** 2) * points_to_dollars
+        theta_pnl_predicted = previous_row["theta"] * points_to_dollars
+
+        bond_pnl_predicted = delta_pnl_predicted + gamma_pnl_predicted + theta_pnl_predicted
+        residual = bond_pnl - bond_pnl_predicted
+
+    #Rebalance to today's delta, after the P&L has been booked
+    target_shares_short = delta * conversion_shares
+    shares_traded = target_shares_short - shares_short
+    cash = cash + (shares_traded * stock_price)
+    shares_short = target_shares_short
+
+    bond_market_value = theo * points_to_dollars
+    NAV = bond_market_value + cash - (shares_short * stock_price)
+
+    total_pnl = bond_pnl + equity_pnl
+
+    backtest_rows.append({
+        "stock price": stock_price,
+        "theo": theo,
+        "delta": delta,
+        "target shares short": target_shares_short,
+        "new shares traded": shares_traded,
+        "bond pnl": bond_pnl,
+        "equity pnl": equity_pnl,
+        "Total PNL": total_pnl,
+        "Predicted delta PNL": delta_pnl_predicted,
+        "Predicted gamma PNL": gamma_pnl_predicted,
+        "Predicted theta PNL": theta_pnl_predicted,
+        "Predicted bond PNL": bond_pnl_predicted,
+        "Residual": residual,
+        "Cash": cash,
+        "NAV": NAV
+    })
+
+    previous_row = daily_row #reset previous_row so that next loop compares to respective day before, not just day 1
+
+AKAM_27_backtest = pd.DataFrame(backtest_rows, index = AKAM_27_daily_pricing.index)
+AKAM_27_backtest["Cumulative PNL"] = AKAM_27_backtest["Total PNL"].cumsum()
+AKAM_27_backtest["Predicted gamma theta PNL"] = (AKAM_27_backtest["Predicted gamma PNL"] + AKAM_27_backtest["Predicted theta PNL"])
+AKAM_27_backtest["NAV change"] = AKAM_27_backtest["NAV"].diff()
+AKAM_27_backtest["NAV check"] = AKAM_27_backtest["NAV change"] - AKAM_27_backtest["Total PNL"]
+
+first_day = AKAM_27_backtest.iloc[0]
+last_day = AKAM_27_backtest.iloc[-1]
+AKAM_27_conversion_price = 1000 / AKAM_27_daily_pricing["conversion ratio"].iloc[0]
+
+print(f"\n \nAKAM 0.375% up 30 due 2027, gamma scalp testing: ${AKAM_27_face_held:,.0f} face ({AKAM_27_bonds_held:,.0f} bonds), conversion price ${AKAM_27_conversion_price:.2f}")
+print(f"{AKAM_stock_prices.index[0]:%b %d, %Y} to {AKAM_stock_prices.index[-1]:%b %d, %Y}, {len(AKAM_27_backtest)} trading days, delta neutral and rebalanced at daily closes")
+print(f"Underlying AKAM stock ${first_day['stock price']:.2f} to ${last_day['stock price']:.2f}")
+print(f"Convertible bond value (Black-Scholes option + bond floor theo) {first_day['theo']:.2f} to {last_day['theo']:.2f} \n parity: {AKAM_27_daily_pricing['parity'].iloc[0]:.2f} to {AKAM_27_daily_pricing['parity'].iloc[-1]:.2f} \n convertible delta: {first_day['delta']:.1%} to {last_day['delta']:.1%} \n hedge: {first_day['target shares short']:,.0f} to {last_day['target shares short']:,.0f} shares short")
+
+total_pnl_sum = AKAM_27_backtest["Total PNL"].sum()
+predicted_gamma_theta_pnl_sum = AKAM_27_backtest["Predicted gamma theta PNL"].sum()
+residual_pnl_sum = AKAM_27_backtest["Residual"].sum()
+
+print(f"Total PNL: ${total_pnl_sum:,.2f}")
+print(f"Predicted gamma + theta PNL: ${predicted_gamma_theta_pnl_sum:,.2f} \n gamma collected: ${AKAM_27_backtest['Predicted gamma PNL'].sum():,.2f} \n theta paid: ${AKAM_27_backtest['Predicted theta PNL'].sum():,.2f}")
+print(f"Residual: ${residual_pnl_sum:,.2f}")
+#print(AKAM_27_backtest[["Total PNL", "Predicted gamma theta PNL", "Residual"]].sum())
+daily_log_returns = np.log(AKAM_stock_prices / AKAM_stock_prices.shift(1)).dropna()
+realized_vol = daily_log_returns.std() * np.sqrt(252) * 100
+print(f"Realized vol over the period: {round(realized_vol, 1)}%")
+print(f"Assumed vol in the model: {AKAM_27_backtest_terms['equity_vol']}%")
+
+largest_NAV_discrepancy = AKAM_27_backtest["NAV check"].abs().max()
+#print(f"Largest NAV discrepancy: {largest_NAV_discrepancy}")
+#with pd.option_context("display.max_columns", None, "display.width", 200):
+#    print(AKAM_27_backtest.head())
+#    print(AKAM_27_backtest.tail())
